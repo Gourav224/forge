@@ -29,7 +29,8 @@ For plain answers that don't need a tool, respond with normal text.`;
     messages: Array<{ role: string; content: string | ContentBlock[] }>,
     systemPrompt: string,
     tools: any[],
-    onStream?: (text: string) => void
+    onStream?: (text: string) => void,
+    signal?: AbortSignal
   ): Promise<StreamingResponse> {
     const system = this.injectToolsIntoSystem(systemPrompt, tools);
     const ollamaMessages: any[] = [{ role: "system", content: system }];
@@ -53,6 +54,7 @@ For plain answers that don't need a tool, respond with normal text.`;
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: this.modelId, messages: ollamaMessages, stream: true }),
+      signal,
     });
 
     if (!response.ok) throw new Error(`Ollama error ${response.status}: ${response.statusText}`);

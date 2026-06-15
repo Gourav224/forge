@@ -15,7 +15,7 @@ export interface ContentBlock {
 export interface StreamingResponse {
   content: ContentBlock[];
   text: string;
-  stopReason: "end_turn" | "tool_use" | "max_tokens";
+  stopReason: "end_turn" | "tool_use" | "max_tokens" | "aborted";
   toolCalls: ToolCall[];
 }
 
@@ -24,6 +24,7 @@ export interface ProviderClient {
     messages: Array<{ role: string; content: string | ContentBlock[] }>,
     systemPrompt: string,
     tools: any[],
-    onStream?: (text: string) => void
+    onStream?: (text: string) => void,
+    signal?: AbortSignal
   ): Promise<StreamingResponse>;
 }

@@ -45,7 +45,8 @@ export class OpenAIProvider implements ProviderClient {
     messages: Array<{ role: string; content: string | ContentBlock[] }>,
     systemPrompt: string,
     tools: any[],
-    onStream?: (text: string) => void
+    onStream?: (text: string) => void,
+    signal?: AbortSignal
   ): Promise<StreamingResponse> {
     const openaiMessages = [{ role: "system", content: systemPrompt }, ...this.convertMessages(messages)];
     const openaiTools = tools.map((t) => ({
@@ -63,6 +64,7 @@ export class OpenAIProvider implements ProviderClient {
         stream: true,
         max_tokens: 4096,
       }),
+      signal,
     });
 
     if (!response.ok) {

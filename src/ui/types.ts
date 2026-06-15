@@ -1,8 +1,3 @@
-export interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
-
 export interface ToolEvent {
   id: string;
   name: string;
@@ -11,6 +6,12 @@ export interface ToolEvent {
   result?: string;
   startMs?: number;
   durationMs?: number;
+}
+
+export interface Message {
+  role: "user" | "assistant";
+  content: string;
+  toolEvents?: ToolEvent[];  // frozen tool calls from this turn
 }
 
 export interface AppState {

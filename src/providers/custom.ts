@@ -17,7 +17,8 @@ export class CustomProvider implements ProviderClient {
     messages: Array<{ role: string; content: string | ContentBlock[] }>,
     systemPrompt: string,
     _tools: any[],
-    onStream?: (text: string) => void
+    onStream?: (text: string) => void,
+    signal?: AbortSignal
   ): Promise<StreamingResponse> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (this.apiKey) headers["Authorization"] = `Bearer ${this.apiKey}`;
@@ -34,7 +35,7 @@ export class CustomProvider implements ProviderClient {
       stream: true,
     };
 
-    const response = await fetch(this.endpoint, { method: "POST", headers, body: JSON.stringify(body) });
+    const response = await fetch(this.endpoint, { method: "POST", headers, body: JSON.stringify(body), signal });
     if (!response.ok) throw new Error(`Custom API error: ${response.status} ${response.statusText}`);
 
     let text = "";

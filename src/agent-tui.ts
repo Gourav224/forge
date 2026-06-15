@@ -13,7 +13,8 @@ export async function runAgentTui(
   prompt: string,
   systemPrompt: string,
   existingMessages: Array<{ role: string; content: string }>,
-  callbacks: TuiCallbacks
+  callbacks: TuiCallbacks,
+  signal?: AbortSignal
 ): Promise<string> {
   const messages: Array<{ role: string; content: string | ContentBlock[] }> = [
     ...existingMessages,
@@ -23,10 +24,9 @@ export async function runAgentTui(
   let finalText = "";
 
   while (true) {
-    const response = await provider.chat(messages, systemPrompt, TOOLS as any[], (chunk) => {
-      callbacks.onText(chunk);
-    });
+    if (signal?.aborted) break;
 
+    const response = await provider.chat(messages, systemPrompt, TOOLS as any[], callbacks.onText, signal);
     finalText += response.text;
 
     if (response.stopReason !== "tool_use" || response.toolCalls.length === 0) break;
@@ -34,6 +34,8 @@ export async function runAgentTui(
     const toolResults: ContentBlock[] = [];
 
     for (const toolCall of response.toolCalls) {
+      if (signal?.aborted) break;
+
       const eventId = toolCall.id || randomUUID();
       callbacks.onToolStart(eventId, toolCall.name, toolCall.input);
 

@@ -6,7 +6,8 @@ export async function runAgent(
   prompt: string,
   systemPrompt: string,
   onStream?: (text: string) => void,
-  existingMessages?: Array<{ role: string; content: string }>
+  existingMessages?: Array<{ role: string; content: string }>,
+  signal?: AbortSignal
 ): Promise<string> {
   const messages: Array<{ role: string; content: string | ContentBlock[] }> = [
     ...(existingMessages || []),
@@ -16,14 +17,16 @@ export async function runAgent(
   let finalText = "";
 
   while (true) {
-    const response = await provider.chat(messages, systemPrompt, TOOLS as any[], onStream);
+    if (signal?.aborted) break;
+
+    const response = await provider.chat(messages, systemPrompt, TOOLS as any[], onStream, signal);
     finalText += response.text;
 
     if (response.stopReason !== "tool_use" || response.toolCalls.length === 0) break;
 
-    // Execute all tool calls and collect results
     const toolResults: ContentBlock[] = [];
     for (const toolCall of response.toolCalls) {
+      if (signal?.aborted) break;
       const result = await executeTool({ name: toolCall.name, input: toolCall.input });
       toolResults.push({ type: "tool_use", id: toolCall.id, name: toolCall.name, input: toolCall.input, text: result });
     }
