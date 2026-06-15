@@ -1,12 +1,32 @@
 {
   "name": "forge",
-  "module": "index.ts",
+  "version": "0.1.0",
+  "description": "Personal coding agent with multi-provider support",
+  "module": "src/index.ts",
   "type": "module",
-  "private": true,
-  "devDependencies": {
-    "@types/bun": "latest"
+  "bin": {
+    "forge": "./src/index.ts"
   },
-  "peerDependencies": {
+  "scripts": {
+    "dev": "bun --hot ./src/index.ts",
+    "build": "bun build --target=bun ./src/index.ts --outfile=./dist/forge",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "openai": "latest",
+    "commander": "^15.0.0",
+    "ink": "^7.0.6",
+    "react": "^19.2.7",
+    "chalk": "^5.6.2",
+    "ora": "^9.4.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
     "typescript": "^5.9.3"
-  }
+  },
+  "private": true
 }
