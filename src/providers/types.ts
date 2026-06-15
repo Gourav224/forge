@@ -12,11 +12,17 @@ export interface ContentBlock {
   input?: Record<string, unknown>;
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface StreamingResponse {
   content: ContentBlock[];
   text: string;
   stopReason: "end_turn" | "tool_use" | "max_tokens" | "aborted";
   toolCalls: ToolCall[];
+  usage?: TokenUsage;
 }
 
 export interface ProviderClient {

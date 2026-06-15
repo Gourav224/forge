@@ -1,4 +1,4 @@
-import type { ProviderClient, ContentBlock, StreamingResponse, ToolCall } from "./types";
+import type { ProviderClient, ContentBlock, StreamingResponse, ToolCall, TokenUsage } from "./types";
 
 export class OpenAIProvider implements ProviderClient {
   private apiKey: string;
@@ -77,6 +77,7 @@ export class OpenAIProvider implements ProviderClient {
     const toolCalls: ToolCall[] = [];
     const accum: Record<number, { id: string; name: string; arguments: string }> = {};
     let stopReason: StreamingResponse["stopReason"] = "end_turn";
+    let usage: TokenUsage | undefined;
 
     const reader = response.body?.getReader();
     if (!reader) throw new Error("No response body");
@@ -100,6 +101,7 @@ export class OpenAIProvider implements ProviderClient {
             const finish = ev.choices?.[0]?.finish_reason;
             if (finish === "tool_calls") stopReason = "tool_use";
             if (finish === "length") stopReason = "max_tokens";
+            if (ev.usage) usage = { inputTokens: ev.usage.prompt_tokens, outputTokens: ev.usage.completion_tokens };
             if (delta?.content) { text += delta.content; if (onStream) onStream(delta.content); }
             if (delta?.tool_calls) {
               for (const tc of delta.tool_calls) {
@@ -125,6 +127,6 @@ export class OpenAIProvider implements ProviderClient {
     }
     if (text) content.push({ type: "text", text });
 
-    return { content, text, stopReason, toolCalls };
+    return { content, text, stopReason, toolCalls, usage };
   }
 }

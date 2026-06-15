@@ -272,6 +272,20 @@ async function launchTui(opts: Record<string, any>) {
 
   getDb();
 
+  // First-run check: no API key configured
+  const { getConfiguredProviders } = await import("./db/index");
+  const configured = getConfiguredProviders();
+  const hasEnvKey = process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY;
+  if (configured.length === 0 && !hasEnvKey) {
+    console.log("\n  Welcome to Forge!\n");
+    console.log("  No API key found. Set one to get started:\n");
+    console.log("    forge --set-key anthropic sk-ant-...");
+    console.log("    forge --set-key openai sk-...\n");
+    console.log("  Or set an environment variable: ANTHROPIC_API_KEY=...\n");
+    closeDb();
+    process.exit(0);
+  }
+
   // Load MCP + custom tools
   const { tools: mcpTools, execute: mcpExecute } = await loadMcpTools();
   if (mcpTools.length > 0) { registerMcpExecutor(mcpExecute); TOOLS.push(...mcpTools); }
@@ -306,25 +320,21 @@ async function launchTui(opts: Record<string, any>) {
     }
   }
 
-  const { provider } = resolveProvider(modelString);
-
   const { waitUntilExit } = render(
     React.createElement(App, {
       model: modelString,
       sessionId,
       systemPrompt,
       initialMessages,
-      providerFactory: () => provider,
-      onSessionCreate: (sid) => {
-        const title = "interactive session";
-        // Insert session row if it doesn't exist yet
+      createProvider: (m: string) => resolveProvider(m).provider,
+      onSessionCreate: (sid: string) => {
         try {
           getDb().prepare(
             "INSERT OR IGNORE INTO sessions (id, parent_id, title, model, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?)"
-          ).run(sid, title, modelString, Date.now(), Date.now());
+          ).run(sid, "interactive session", modelString, Date.now(), Date.now());
         } catch { /* already exists */ }
       },
-      onMessage: (sid, role, content) => {
+      onMessage: (sid: string, role: "user" | "assistant", content: string) => {
         saveMessage(sid, role, content);
       },
     })

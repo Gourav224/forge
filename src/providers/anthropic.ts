@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { ProviderClient, ContentBlock, StreamingResponse, ToolCall } from "./types";
+import type { ProviderClient, ContentBlock, StreamingResponse, ToolCall, TokenUsage } from "./types";
 
 export class AnthropicProvider implements ProviderClient {
   private client: Anthropic;
@@ -71,7 +71,12 @@ export class AnthropicProvider implements ProviderClient {
         : message.stop_reason === "max_tokens" ? "max_tokens"
         : "end_turn";
 
-      return { content, text, stopReason: stopReason as StreamingResponse["stopReason"], toolCalls };
+      const usage: TokenUsage = {
+        inputTokens: message.usage.input_tokens,
+        outputTokens: message.usage.output_tokens,
+      };
+
+      return { content, text, stopReason: stopReason as StreamingResponse["stopReason"], toolCalls, usage };
     } catch (err: any) {
       if (signal?.aborted || err?.name === "AbortError" || err?.message?.includes("aborted")) {
         return { content, text, stopReason: "aborted", toolCalls };

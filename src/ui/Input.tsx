@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 
-const SLASH_COMMANDS = ["/clear", "/new", "/help", "/models", "/exit"];
+const SLASH_COMMANDS = ["/clear", "/new", "/sessions", "/model", "/help", "/models", "/exit"];
 
 interface Props {
   onSubmit: (text: string) => void;
@@ -12,6 +12,11 @@ interface Props {
 
 export function Input({ onSubmit, onCommand, onAbort, disabled = false }: Props) {
   const [value, setValue] = useState("");
+
+  // History — refs so mutations never cause a re-render
+  const historyRef = useRef<string[]>([]);
+  const histCursorRef = useRef(-1); // -1 = at current draft
+  const draftRef = useRef("");       // saves in-progress text when browsing history
 
   const hint = value.startsWith("/")
     ? SLASH_COMMANDS.filter((c) => c.startsWith(value) && c !== value)[0]
@@ -26,27 +31,48 @@ export function Input({ onSubmit, onCommand, onAbort, disabled = false }: Props)
       return;
     }
 
+    // History navigation (allowed even mid-typing)
+    if (key.upArrow && !disabled) {
+      if (histCursorRef.current === -1) draftRef.current = value;
+      const next = histCursorRef.current + 1;
+      if (next < historyRef.current.length) {
+        histCursorRef.current = next;
+        setValue(historyRef.current[historyRef.current.length - 1 - next]!);
+      }
+      return;
+    }
+    if (key.downArrow && !disabled) {
+      const next = histCursorRef.current - 1;
+      if (next < 0) {
+        histCursorRef.current = -1;
+        setValue(draftRef.current);
+      } else {
+        histCursorRef.current = next;
+        setValue(historyRef.current[historyRef.current.length - 1 - next]!);
+      }
+      return;
+    }
+
     if (key.return) {
       if (disabled) return;
       const trimmed = value.trim();
       if (!trimmed) return;
+      // Push to history and reset cursor
+      historyRef.current.push(trimmed);
+      histCursorRef.current = -1;
+      draftRef.current = "";
+      setValue("");
       if (trimmed.startsWith("/")) {
         onCommand(trimmed);
-        setValue("");
       } else {
         onSubmit(trimmed);
-        setValue("");
       }
       return;
     }
 
     if (disabled) return;
 
-    if (key.tab && hint) {
-      setValue(hint);
-      return;
-    }
-
+    if (key.tab && hint) { setValue(hint); return; }
     if (key.ctrl && input === "u") { setValue(""); return; }
     if (key.backspace || key.delete) { setValue((v) => v.slice(0, -1)); return; }
     if (!key.ctrl && !key.meta && input) setValue((v) => v + input);

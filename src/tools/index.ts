@@ -34,19 +34,18 @@ export function registerMcpExecutor(fn: (name: string, input: Record<string, unk
   mcpExecutor = fn;
 }
 
-export async function executeTool(tool: ToolCall): Promise<string> {
+export async function executeTool(tool: ToolCall, signal?: AbortSignal): Promise<string> {
   switch (tool.name) {
-    case "bash_exec":   return bashExec(tool.input.command as string, tool.input.cwd as string | undefined);
+    case "bash_exec":   return bashExec(tool.input.command as string, tool.input.cwd as string | undefined, undefined, signal);
     case "read_file":   return readFile(tool.input.path as string, tool.input.start_line as number, tool.input.end_line as number);
     case "write_file":  return writeFile(tool.input.path as string, tool.input.content as string);
     case "edit_file":   return editFile(tool.input.path as string, tool.input.old_string as string, tool.input.new_string as string);
     case "list_dir":    return listDir(tool.input.path as string, tool.input.depth as number);
     case "search_text": return searchText(tool.input.pattern as string, tool.input.path as string, tool.input.glob as string);
-    case "http_fetch":  return httpFetch(tool.input.url as string);
+    case "http_fetch":  return httpFetch(tool.input.url as string, undefined, undefined, signal);
     case "patch_file":  return patchFile(tool.input.path as string, tool.input.diff as string);
     case "skill":       return skillTool(tool.input.name as string | undefined);
     default:
-      // Try MCP executor for unknown tools
       if (mcpExecutor) return mcpExecutor(tool.name, tool.input);
       return `Unknown tool: ${tool.name}`;
   }

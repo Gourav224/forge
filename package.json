@@ -8,9 +8,11 @@
     "forge": "./src/index.ts"
   },
   "scripts": {
-    "dev": "bun --hot ./src/index.ts",
-    "build": "bun build --target=bun ./src/index.ts --outfile=./dist/forge",
-    "test": "bun test"
+    "dev":            "bun --hot ./src/index.ts",
+    "build":          "bun build --target=bun --compile ./src/index.ts --outfile=./dist/forge",
+    "install:local":  "bun link",
+    "install:global": "bun build --target=bun --compile ./src/index.ts --outfile /usr/local/bin/forge",
+    "test":           "bun test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
