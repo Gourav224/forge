@@ -75,7 +75,9 @@ export class McpClient {
               if (msg.error) pending.reject(new Error(msg.error.message));
               else pending.resolve(msg.result);
             }
-          } catch { /* ignore non-JSON */ }
+          } catch (e) {
+            if (process.env.FORGE_DEBUG) console.error(`[mcp:${this.serverName}] parse error:`, e, "raw:", line.slice(0, 100));
+          }
         }
       }
     } catch { /* process ended */ }
@@ -91,13 +93,20 @@ export class McpClient {
       if (stdin && typeof stdin !== "number") {
         (stdin as import("bun").FileSink).write(line);
       }
-      // Timeout after 15s
-      setTimeout(() => {
+      // Timeout: clean up pending entry to prevent memory leak
+      const timer = setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id);
-          reject(new Error(`MCP call timed out: ${method}`));
+          reject(new Error(`MCP call timed out (15s): ${method} on ${this.serverName}`));
         }
       }, 15_000);
+      // Ensure timer is cleared when resolved normally
+      const origResolve = resolve;
+      const origReject = reject;
+      this.pending.set(id, {
+        resolve: (v) => { clearTimeout(timer); this.pending.delete(id); origResolve(v); },
+        reject: (e) => { clearTimeout(timer); this.pending.delete(id); origReject(e); },
+      });
     });
   }
 

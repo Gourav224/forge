@@ -1,184 +1,127 @@
-# Forge - Personal Coding Agent
+<div align="center">
 
-A **terminal-based coding agent** powered by Claude, built with Bun, SQLite, and TypeScript.
+# ◈ Forge
 
-Forge takes natural language tasks and executes them in your codebase—reading files, running commands, writing code, searching patterns, and everything in between.
+**A terminal-native AI coding agent — and a hackable harness you can make your own.**
 
-## Features
+Forge takes a natural-language task and carries it out in your codebase: reading files, running commands, editing code, searching, and verifying — across any LLM provider, with a clean Ink TUI.
 
-✨ **Multi-tool Agent Loop**
-- Execute bash commands, read/write files, search code
-- Understands context and plans multi-step operations
-- Streams output in real-time
+Built with **Bun · TypeScript · SQLite · Ink** · inspired by [pi.dev](https://pi.dev) and [opencode](https://opencode.ai).
 
-✨ **Built with Bun**
-- Native SQLite support (`bun:sqlite`)
-- Fast startup, single binary
-- Direct JSX/TSX support
+</div>
 
-✨ **Session Persistence**
-- All conversations saved to `~/.forge/forge.db`
-- Resume previous sessions
-- Branching support (explore different approaches)
+```
+█▀▀ █▀█ █▀█ █▀▀ █▀▀
+█▀▀ █▄█ █▀▄ █▄█ ██▄   forge your code with AI
+```
 
-✨ **Multi-Provider Ready**
-- Anthropic Claude (default)
-- OpenAI/OpenRouter (stubs)
-- Ollama local models (stubs)
+---
 
-✨ **Project Instructions**
-- Load `AGENTS.md` from your project
-- Inject custom instructions without bloating the system prompt
-- Skills system for domain-specific guidance
+## Why Forge
 
-## Installation
+Most coding agents are a black box. Forge is a **small, readable harness** (~3k lines) you can actually understand and extend:
+
+- 🧠 **Agent loop** — call model → run tools → repeat, with an iteration guard and context compaction. One core loop ([`src/agent/loop.ts`](src/agent/loop.ts)) shared by the CLI and the TUI.
+- 🔐 **Permission modes** — `plan` (read-only, proposes a plan), `build` (edits require approval), `auto` (unattended). Risky tools are gated before they run.
+- 🪄 **Sub-agents** — delegate a focused, read-only investigation to a child agent via the `task` tool, keeping your main context clean.
+- 🗜️ **Context compaction** — long sessions auto-summarize older turns so they never blow the context window. Manual `/compact` too.
+- 🌿 **Session branching** — every conversation is persisted to SQLite; `/branch` and `/rewind` fork a new path from any point (a `parent_id` tree).
+- 🧩 **Skills & MCP** — drop a `SKILL.md` for domain guidance; connect any Model Context Protocol server for extra tools.
+- 🎛️ **Multi-provider** — Anthropic, OpenAI, OpenRouter, Ollama (local), or any OpenAI-compatible endpoint. Switch live with `/model`.
+- ✍️ **Prompts as files** — the system & mode prompts live in [`src/prompts/*.md`](src/prompts), not buried in code. Edit behavior without touching logic.
+
+## Install
 
 ```bash
-# Clone
-git clone <repo> forge
-cd forge
-
-# Install
+git clone <repo> forge && cd forge
 bun install
 
-# Set API key
-export ANTHROPIC_API_KEY="sk-ant-..."
+# interactive setup — pick a provider, paste a key
+bun src/index.ts login        # CLI wizard
+#   …or launch the TUI and run /login
 
-# Run
-bun src/index.ts "read src/index.ts"
+# build a standalone binary
+bun run build                 # → ./dist/forge
 ```
 
-Or build a standalone binary:
+## Quick start
 
 ```bash
-bun run build
-./dist/forge "your task here"
+forge                                            # launch the interactive TUI
+forge "add a /health route and run the tests"    # one-shot task
+forge --plan "refactor the auth module"          # read-only plan first
+forge -m openai:gpt-4o "explain this codebase"   # pick a model
 ```
 
-## Usage
+### The TUI
 
-### One-shot Task
+```
+✦ forge
+  ✓ ▸ read   src/server.ts            22ms
+  ✓ ✎ edit   src/server.ts             8ms
+  ✓ $ bash   bun test                 1.3s
+    └ 12 pass
 
-```bash
-forge "create a hello world in TypeScript"
-forge "read src/cli/index.ts"
-forge "search for all TODO comments"
+  I added the /health route and verified — all green.
+
+╭──────────────────────────────────────────────────────────╮
+│ ❯ ask Forge to build, fix, or explain…                   │
+╰──────────────────────────────────────────────────────────╯
+  ↵ send   ⌃J newline   ←→ move   ↑↓ history
+─────────────────────────────────────────────────────────────
+ ◈ forge · build · anthropic:claude-sonnet-4-6 · ⎇ main · ctx 23% · ready
 ```
 
-### List Sessions
+## Commands
 
-```bash
-forge --list
-```
+| TUI command | What it does |
+|-------------|-------------|
+| `/mode plan\|build\|auto` | switch operating mode |
+| `/login` · `/config` | add a provider key · show configuration |
+| `/model` · `/models` | switch model · discover available models |
+| `/compact` | summarize the conversation to free context |
+| `/branch` · `/rewind <n>` | fork the session · rewind to message *n* |
+| `/sessions` · `/new` · `/clear` | browse history · fresh session · clear screen |
 
-### Continue Session (Future)
-
-```bash
-forge --session <id>
-```
-
-## Tools
-
-The agent has access to:
-
-| Tool | Purpose |
-|------|---------|
-| `bash_exec` | Run shell commands (git, npm, bun, etc.) |
-| `read_file` | Read file contents (with line ranges) |
-| `write_file` | Create/modify files |
-| `list_dir` | List directories (with depth control) |
-| `search_text` | Search files (grep, regex) |
-| `http_fetch` | Fetch URLs (docs, APIs) |
-
-## Project Instructions
-
-Create an `AGENTS.md` in your project root to customize Forge's behavior:
-
-```markdown
-# My Project Instructions
-
-This is a React web app. Prefer:
-- ESM imports
-- React hooks
-- Bun for builds/tests
-- TypeScript strict mode
-
-When refactoring auth, preserve JWT token validation.
-```
-
-Forge will automatically load and inject these instructions into every task.
-
-## Database
-
-Sessions are stored in `~/.forge/forge.db`:
-
-```bash
-# View sessions
-sqlite3 ~/.forge/forge.db "SELECT id, title, created_at FROM sessions LIMIT 10;"
-
-# View conversation
-sqlite3 ~/.forge/forge.db "SELECT role, content FROM messages WHERE session_id='<id>' ORDER BY created_at;"
-```
+| CLI command | What it does |
+|-------------|-------------|
+| `forge login` | interactive provider + key setup |
+| `forge provider list \| logout <id>` | manage providers |
+| `forge config [path\|get\|set\|unset]` | view / edit settings |
+| `forge clean` · `forge reset` | delete history · wipe everything |
+| `forge mcp add\|list\|remove` | manage MCP servers |
+| `--plan` · `--auto` · `--mode <m>` | run in a specific mode |
 
 ## Architecture
 
 ```
-src/
-├── index.ts           # CLI entry point
-└── lib/
-    ├── db.ts          # SQLite session management
-    ├── tools.ts       # 6 built-in tools
-    └── agent.ts       # Main Claude agent loop
+CLI / TUI ─► resolveProvider ─► runLoop ──► provider.chat (stream)
+                                  │            │
+                                  │            └─ tool_use ─► executeTool ─► tools / MCP / task(sub-agent)
+                                  ├─ mode tool-filter + permission gate
+                                  └─ compaction when context fills
+                                               │
+                                          SQLite (sessions · messages · keys · settings · mcp)
 ```
 
-**No external UI libraries** (yet). Phase 2 will add Ink (React TUI).
+See [`docs/architecture.md`](docs/architecture.md) for the full module map, and [`docs/agent-loop.md`](docs/agent-loop.md) for the harness internals.
 
-## What's Built (Phase 1-3)
+## Tech stack
 
-- ✅ Agent loop with Claude
-- ✅ 6 core tools
-- ✅ SQLite session persistence
-- ✅ Project instructions (AGENTS.md)
-- ✅ Multi-provider registry
-- ✅ Modular Bun-native setup
+| Layer | Choice | Why |
+|-------|--------|-----|
+| Runtime | **Bun** | fast start, native SQLite, single-binary compile, text imports |
+| TUI | **Ink (React)** | declarative terminal UI |
+| Storage | **bun:sqlite** | zero-config, WAL, prepared statements — no ORM |
+| Providers | Anthropic / OpenAI SDKs + `fetch` | streaming, abortable |
+| Language | **TypeScript** (strict) | type-safe, no build step in dev |
 
-## What's Next
+## Documentation
 
-- [ ] Phase 2: Interactive TUI with Ink
-- [ ] Phase 3: Skills system
-- [ ] Phase 4: Context compaction (token limits)
-- [ ] Phase 5: OpenAI/Ollama full support
-- [ ] Phase 6: Settings UI for API keys
-- [ ] Phase 7: CLI modes (JSON, interactive)
-- [ ] Phase 8: TUI polish & keybindings
-- [ ] Phase 9: Plugin system
-- [ ] Phase 10: Docs & examples
+[Docs index](docs/index.md) · [Modes & permissions](docs/modes.md) · [Agent loop](docs/agent-loop.md) · [Tools](docs/tools.md) · [Providers](docs/providers.md) · [Skills](docs/skills.md) · [MCP](docs/mcp.md) · [Troubleshooting](docs/troubleshooting.md)
 
-## Environment Variables
-
-```bash
-ANTHROPIC_API_KEY     # Required: Anthropic Claude API key
-OPENAI_API_KEY        # Optional: OpenAI API key
-OPENROUTER_API_KEY    # Optional: OpenRouter API key
-```
-
-## Development
-
-```bash
-# Watch mode
-bun run dev
-
-# Run tests (coming soon)
-bun test
-
-# Build binary
-bun run build
-```
+See [ROADMAP.md](ROADMAP.md) for what's done and what's next.
 
 ## License
 
-MIT
-
----
-
-**Built with Bun, SQLite, and Claude. Inspired by [pi.dev](https://pi.dev).**
+Personal project — MIT.

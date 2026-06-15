@@ -1,5 +1,7 @@
 import { readdir } from "node:fs/promises";
 
+const ALWAYS_IGNORE = new Set([".git", "node_modules", ".next", "dist", ".turbo", ".cache", "coverage"]);
+
 export async function listDir(dir = ".", depth = 1): Promise<string> {
   const items: string[] = [];
 
@@ -8,6 +10,9 @@ export async function listDir(dir = ".", depth = 1): Promise<string> {
     try {
       const entries = await readdir(d, { withFileTypes: true });
       for (const entry of entries) {
+        // Always skip noisy directories
+        if (ALWAYS_IGNORE.has(entry.name)) continue;
+        // Skip other dot-files/dirs beyond root level
         if (entry.name.startsWith(".") && currentDepth > 1) continue;
         const indent = "  ".repeat(currentDepth - 1);
         items.push(`${indent}${entry.name}${entry.isDirectory() ? "/" : ""}`);
@@ -28,7 +33,7 @@ export async function listDir(dir = ".", depth = 1): Promise<string> {
 
 export const listDirTool = {
   name: "list_dir",
-  description: "List files and directories. Use depth > 1 to recurse into subdirectories.",
+  description: "List files and directories. Automatically skips node_modules, .git, dist. Use depth > 1 to recurse.",
   input_schema: {
     type: "object" as const,
     properties: {

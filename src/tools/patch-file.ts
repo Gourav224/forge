@@ -1,13 +1,23 @@
-import { bashExec } from "./bash";
+import { unlinkSync } from "node:fs";
 
 export async function patchFile(filePath: string, diff: string): Promise<string> {
-  const tmp = `/tmp/forge-patch-${Date.now()}.diff`;
+  const tmp = `${process.env.TMPDIR || "/tmp"}/forge-patch-${Date.now()}.diff`;
   try {
     await Bun.write(tmp, diff);
-    const result = await bashExec(`patch "${filePath}" < "${tmp}"`);
-    return result;
+    const proc = Bun.spawn(["patch", "-p1", filePath, "--input", tmp], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const code = await proc.exited;
+    if (code !== 0) return `patch failed (exit ${code})\n${stderr || stdout}`;
+    return stdout || `Patched ${filePath}`;
+  } catch (err) {
+    return `Error: ${err instanceof Error ? err.message : String(err)}`;
   } finally {
-    await bashExec(`rm -f "${tmp}"`);
+    try { unlinkSync(tmp); } catch { /* already gone */ }
   }
 }
 

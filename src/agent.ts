@@ -1,48 +1,37 @@
-import type { ProviderClient, ContentBlock } from "./providers/types";
-import { TOOLS, executeTool } from "./tools/index";
-import { getSetting } from "./db/index";
+import type { ProviderClient } from "./providers/types";
+import { TOOLS } from "./tools/index";
+import { runLoop, type LoopMessage } from "./agent/loop";
+import { confirm } from "./config/prompt";
+import type { AgentMode } from "./agent/modes";
 
+/** CLI adapter over the shared agent loop. Approval is prompted on a TTY only. */
 export async function runAgent(
   provider: ProviderClient,
   prompt: string,
   systemPrompt: string,
   onStream?: (text: string) => void,
   existingMessages?: Array<{ role: string; content: string }>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  mode: AgentMode = "build",
+  model?: string
 ): Promise<string> {
-  const messages: Array<{ role: string; content: string | ContentBlock[] }> = [
-    ...(existingMessages || []),
-    { role: "user", content: prompt },
-  ];
+  const messages: LoopMessage[] = [...(existingMessages || []), { role: "user", content: prompt }];
 
-  const maxIter = Number(getSetting("agent.max_iterations") ?? 40);
-  let iter = 0;
-  let finalText = "";
+  const onApproval = process.stdin.isTTY
+    ? async (_id: string, name: string, input: Record<string, unknown>) => {
+        const summary = String(input.command ?? input.path ?? "").slice(0, 80);
+        return confirm(`\n  ⚠ Allow ${name}${summary ? ` (${summary})` : ""}?`, false);
+      }
+    : undefined;
 
-  while (true) {
-    if (signal?.aborted) break;
-    if (++iter > maxIter) {
-      const notice = `\n\n[forge: reached max iterations (${maxIter}). Stopping.]\n`;
-      finalText += notice;
-      if (onStream) onStream(notice);
-      break;
-    }
-
-    const response = await provider.chat(messages, systemPrompt, TOOLS as any[], onStream, signal);
-    finalText += response.text;
-
-    if (response.stopReason !== "tool_use" || response.toolCalls.length === 0) break;
-
-    const toolResults: ContentBlock[] = [];
-    for (const toolCall of response.toolCalls) {
-      if (signal?.aborted) break;
-      const result = await executeTool({ name: toolCall.name, input: toolCall.input }, signal);
-      toolResults.push({ type: "tool_use", id: toolCall.id, name: toolCall.name, input: toolCall.input, text: result });
-    }
-
-    messages.push({ role: "assistant", content: response.content });
-    messages.push({ role: "user", content: toolResults });
-  }
-
-  return finalText;
+  const { text } = await runLoop(messages, {
+    provider,
+    systemPrompt,
+    tools: TOOLS as Array<{ name: string }>,
+    mode,
+    model,
+    signal,
+    hooks: { onText: onStream, onApproval },
+  });
+  return text;
 }

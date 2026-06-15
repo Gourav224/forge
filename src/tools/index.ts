@@ -7,6 +7,7 @@ import { searchText, searchTextTool } from "./search-text";
 import { httpFetch, httpFetchTool } from "./http-fetch";
 import { patchFile, patchFileTool } from "./patch-file";
 import { skillTool, skillToolDef } from "./skill";
+import { taskTool } from "./task";
 
 export { bashExec, readFile, writeFile, editFile, listDir, searchText, httpFetch, patchFile };
 
@@ -20,6 +21,7 @@ export const TOOLS = [
   httpFetchTool,
   patchFileTool,
   skillToolDef,
+  taskTool,
 ];
 
 export interface ToolCall {
@@ -45,6 +47,11 @@ export async function executeTool(tool: ToolCall, signal?: AbortSignal): Promise
     case "http_fetch":  return httpFetch(tool.input.url as string, undefined, undefined, signal);
     case "patch_file":  return patchFile(tool.input.path as string, tool.input.diff as string);
     case "skill":       return skillTool(tool.input.name as string | undefined);
+    case "task": {
+      // Lazy import breaks the tools ↔ agent/loop import cycle.
+      const { runSubagent } = await import("../agent/subagent");
+      return runSubagent(tool.input.prompt as string, signal);
+    }
     default:
       if (mcpExecutor) return mcpExecutor(tool.name, tool.input);
       return `Unknown tool: ${tool.name}`;

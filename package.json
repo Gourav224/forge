@@ -8,14 +8,14 @@
     "forge": "./src/index.ts"
   },
   "scripts": {
-    "dev":            "bun --hot ./src/index.ts",
-    "build":          "bun build --target=bun --compile ./src/index.ts --outfile=./dist/forge",
-    "install:local":  "bun link",
+    "dev": "bun --hot ./src/index.ts",
+    "build": "bun build --target=bun --compile ./src/index.ts --outfile=./dist/forge",
+    "install:local": "bun link",
     "install:global": "bun build --target=bun --compile ./src/index.ts --outfile /usr/local/bin/forge",
-    "test":           "bun test"
+    "test": "bun test"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "latest",
+    "@anthropic-ai/sdk": "0.104.2",
     "openai": "latest",
     "commander": "^15.0.0",
     "ink": "^7.0.6",
@@ -28,6 +28,8 @@
     "@types/bun": "latest",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
+    "ink-testing-library": "^4.0.0",
+    "react-devtools-core": "^7.0.1",
     "typescript": "^5.9.3"
   },
   "private": true

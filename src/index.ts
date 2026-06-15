@@ -7,29 +7,23 @@ import {
   createSession, saveMessage, listSessions, getSession, getSessionMessages,
   getAllApiKeys,
   addMcpServer, listMcpServers, removeMcpServer,
+  getDbStats, getDbPath, resetAll, clearSessions,
 } from "./db/index";
 import { runAgent } from "./agent";
 import { discoverAllModels, formatModelListForDisplay } from "./providers/discovery";
-import { saveApiKey, showConfigStatus } from "./config/setup";
+import { saveApiKey } from "./config/setup";
 import { loadAgentsMd } from "./config/agents-md";
 import { loadMcpTools, disconnectAllMcp } from "./mcp/loader";
 import { registerMcpExecutor, TOOLS } from "./tools/index";
 import { discoverCustomTools } from "./tools/custom-loader";
-
-const BASE_SYSTEM_PROMPT = `You are Forge, a personal coding agent running in the terminal.
-
-You have access to tools:
-- bash_exec: Run shell commands (git, bun, npm, etc.)
-- read_file: Read file contents with optional line ranges
-- write_file: Create or overwrite files (auto-creates dirs)
-- edit_file: Replace an exact string in a file — preferred for small targeted edits
-- patch_file: Apply unified diffs
-- list_dir: List directory contents with depth control
-- search_text: Grep with regex and file glob support
-- http_fetch: Fetch URLs for docs or APIs
-- skill: List or load available skills for additional guidance
-
-Work directly and efficiently. Use edit_file over write_file when making targeted changes. Read files before modifying them. Use skill() to load relevant skill guidance when starting a specialized task.`;
+import {
+  interactiveLogin, listProviderStatus, logoutProvider,
+  showConfig, getConfigValue, setConfigValue, unsetConfigValue,
+} from "./config/login";
+import { confirm } from "./config/prompt";
+import { type AgentMode, isMode } from "./agent/modes";
+import { systemPrompt as BASE_SYSTEM_PROMPT } from "./prompts/index";
+import { setSubagentModel } from "./agent/subagent";
 
 const DEFAULT_MODEL = "anthropic:claude-3-5-sonnet-20241022";
 
@@ -90,12 +84,104 @@ async function handleMcp(argv: string[]) {
   closeDb();
 }
 
+async function handleProvider(argv: string[]) {
+  getDb();
+  const sub = argv[0] || "list";
+  if (sub === "login") {
+    await interactiveLogin(argv[1]);
+  } else if (sub === "list") {
+    listProviderStatus();
+  } else if (sub === "logout") {
+    if (!argv[1]) { console.error("\nUsage: forge provider logout <provider>\n"); process.exit(1); }
+    logoutProvider(argv[1]);
+  } else {
+    console.error(`\nUnknown provider command: ${sub}. Use: login, list, logout\n`);
+    process.exit(1);
+  }
+  closeDb();
+}
+
+async function handleConfig(argv: string[]) {
+  getDb();
+  const sub = argv[0];
+  if (!sub) {
+    showConfig();
+  } else if (sub === "path") {
+    console.log(getDbPath());
+  } else if (sub === "get") {
+    if (!argv[1]) { console.error("\nUsage: forge config get <key>\n"); process.exit(1); }
+    getConfigValue(argv[1]);
+  } else if (sub === "set") {
+    if (!argv[1] || argv[2] === undefined) { console.error("\nUsage: forge config set <key> <value>\n"); process.exit(1); }
+    setConfigValue(argv[1], argv.slice(2).join(" "));
+  } else if (sub === "unset") {
+    if (!argv[1]) { console.error("\nUsage: forge config unset <key>\n"); process.exit(1); }
+    unsetConfigValue(argv[1]);
+  } else {
+    console.error(`\nUnknown config command: ${sub}. Use: (none), path, get, set, unset\n`);
+    process.exit(1);
+  }
+  closeDb();
+}
+
+async function handleReset() {
+  getDb();
+  const stats = getDbStats();
+  console.log("\n⚠  This permanently deletes:");
+  console.log(`   • ${stats.sessions} sessions, ${stats.messages} messages`);
+  console.log(`   • ${stats.apiKeys} saved API keys`);
+  console.log(`   • ${stats.settings} settings, ${stats.mcpServers} MCP servers`);
+  const ok = await confirm("\n   Wipe everything?", false);
+  if (!ok) { console.log("\n   Cancelled.\n"); closeDb(); return; }
+  resetAll();
+  console.log("\n   ✅ Forge reset to a clean state.\n");
+  closeDb();
+}
+
+async function handleClean() {
+  getDb();
+  const stats = getDbStats();
+  if (stats.sessions === 0) { console.log("\n   No session history to clean.\n"); closeDb(); return; }
+  const ok = await confirm(
+    `\n   Delete ${stats.sessions} sessions (${stats.messages} messages)? Keys & settings are kept.`,
+    false
+  );
+  if (!ok) { console.log("\n   Cancelled.\n"); closeDb(); return; }
+  clearSessions();
+  console.log("\n   ✅ Session history cleared.\n");
+  closeDb();
+}
+
+function resolveMode(opts: Record<string, any>): AgentMode {
+  if (opts.plan) return "plan";
+  if (opts.auto) return "auto";
+  if (opts.mode && isMode(opts.mode)) return opts.mode;
+  return "build";
+}
+
 async function main() {
-  // Handle "forge mcp ..." before Commander parses (avoids subcommand conflicts)
-  if (process.argv[2] === "mcp") {
+  // Handle subcommands before Commander parses (avoids subcommand conflicts)
+  const cmd = process.argv[2];
+  if (cmd === "mcp") {
     await handleMcp(process.argv.slice(3));
     return;
   }
+  if (cmd === "provider") {
+    await handleProvider(process.argv.slice(3));
+    return;
+  }
+  if (cmd === "login") {
+    getDb();
+    await interactiveLogin(process.argv[3]);
+    closeDb();
+    return;
+  }
+  if (cmd === "config") {
+    await handleConfig(process.argv.slice(3));
+    return;
+  }
+  if (cmd === "reset") { await handleReset(); return; }
+  if (cmd === "clean") { await handleClean(); return; }
 
   const program = new Command();
   program
@@ -109,8 +195,30 @@ async function main() {
     .option("-c, --continue", "Continue the most recent session")
     .option("--list-models", "Show available models from all providers")
     .option("--set-key <provider>", "Save an API key")
-    .option("--show-config", "Show configured providers")
-    .addHelpText("after", "\nMCP commands:\n  forge mcp add <name> <command> [--env KEY=VAL,...]\n  forge mcp list\n  forge mcp remove <name>")
+    .option("--show-config", "Show configuration")
+    .option("--plan", "Read-only plan mode (no edits or shell)")
+    .option("--auto", "Auto mode — run tools without approval")
+    .option("--mode <mode>", "Agent mode: plan | build | auto")
+    .addHelpText("after", `
+Setup:
+  forge login                      Interactive provider + API key setup
+  forge provider list              Show provider status
+  forge provider logout <name>     Remove a saved key
+  forge config                     Show configuration
+  forge config set <key> <value>   Change a setting
+
+Maintenance:
+  forge clean                      Delete session history
+  forge reset                      Wipe everything (keys, settings, history)
+
+MCP:
+  forge mcp add <name> <command> [--env KEY=VAL,...]
+  forge mcp list
+  forge mcp remove <name>
+
+Modes:
+  --plan   read-only, proposes a plan      --auto  full access, no prompts
+  --mode build  (default) edits need approval`)
     .parse();
 
   const args = program.args;
@@ -135,7 +243,7 @@ async function main() {
   // --show-config
   if (opts.showConfig) {
     getDb();
-    showConfigStatus();
+    showConfig();
     closeDb();
     return;
   }
@@ -184,6 +292,7 @@ async function main() {
 
   const prompt = args.join(" ");
   const modelString = opts.model || DEFAULT_MODEL;
+  setSubagentModel(modelString);
 
   try {
     getDb();
@@ -235,8 +344,10 @@ async function main() {
     }
 
     const systemPrompt = await buildSystemPrompt();
+    const mode = resolveMode(opts);
 
     console.log(`\n  Model: ${displayName}`);
+    console.log(`  Mode:  ${mode}`);
     console.log(`  Task:  ${prompt}\n`);
     console.log("─".repeat(60) + "\n");
 
@@ -246,7 +357,7 @@ async function main() {
 
     const result = await runAgent(provider, prompt, systemPrompt, (chunk) => {
       process.stdout.write(chunk);
-    }, existingMessages);
+    }, existingMessages, undefined, mode, modelString);
 
     console.log("\n\n" + "─".repeat(60));
     saveMessage(session.id, "user", prompt);
@@ -269,6 +380,7 @@ async function launchTui(opts: Record<string, any>) {
   const { App } = await import("./ui/App");
 
   const modelString: string = opts.model || DEFAULT_MODEL;
+  setSubagentModel(modelString);
 
   getDb();
 
@@ -277,12 +389,11 @@ async function launchTui(opts: Record<string, any>) {
   const configured = getConfiguredProviders();
   const hasEnvKey = process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY;
   if (configured.length === 0 && !hasEnvKey) {
-    console.log("\n  Welcome to Forge!\n");
-    console.log("  No API key found. Set one to get started:\n");
-    console.log("    forge --set-key anthropic sk-ant-...");
-    console.log("    forge --set-key openai sk-...\n");
-    console.log("  Or set an environment variable: ANTHROPIC_API_KEY=...\n");
     closeDb();
+    console.log("\n  ◈ Welcome to Forge!\n");
+    console.log("  No provider is configured yet. Let's set one up:\n");
+    console.log("    forge login                  (interactive setup)\n");
+    console.log("  Or use an environment variable: ANTHROPIC_API_KEY=...\n");
     process.exit(0);
   }
 
@@ -326,6 +437,7 @@ async function launchTui(opts: Record<string, any>) {
       sessionId,
       systemPrompt,
       initialMessages,
+      initialMode: resolveMode(opts),
       createProvider: (m: string) => resolveProvider(m).provider,
       onSessionCreate: (sid: string) => {
         try {

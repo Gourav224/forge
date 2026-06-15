@@ -31,14 +31,17 @@ export function resolveProvider(modelString: string): ResolvedProvider {
 
   switch (providerName) {
     case "anthropic": {
+      if (!anthropicKey) throw new Error("Anthropic API key not set.\n  Run: forge --set-key anthropic sk-ant-...\n  Or:  export ANTHROPIC_API_KEY=sk-ant-...");
       const model = modelPart || "claude-3-5-sonnet-20241022";
       return { provider: new AnthropicProvider(anthropicKey, model), displayName: `Anthropic / ${model}` };
     }
     case "openai": {
+      if (!openaiKey) throw new Error("OpenAI API key not set.\n  Run: forge --set-key openai sk-...\n  Or:  export OPENAI_API_KEY=sk-...");
       const model = modelPart || "gpt-4o";
       return { provider: new OpenAIProvider(openaiKey, model), displayName: `OpenAI / ${model}` };
     }
     case "openrouter": {
+      if (!openrouterKey) throw new Error("OpenRouter API key not set.\n  Run: forge --set-key openrouter <key>\n  Or:  export OPENROUTER_API_KEY=<key>");
       const model = modelPart || "anthropic/claude-3-5-sonnet";
       return {
         provider: new OpenAIProvider(openrouterKey, model, "https://openrouter.ai/api/v1"),

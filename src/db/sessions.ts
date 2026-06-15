@@ -48,3 +48,28 @@ export function getSessionMessages(sessionId: string): SessionMessage[] {
     .prepare("SELECT id, role, content, created_at FROM messages WHERE session_id = ? ORDER BY created_at ASC")
     .all(sessionId) as SessionMessage[];
 }
+
+/**
+ * Fork a session into a new one whose `parent_id` points at the original,
+ * copying the first `upto` messages (or all of them). Used by /branch and /rewind.
+ */
+export function branchSession(fromId: string, upto?: number): Session | null {
+  const db = getDb();
+  const parent = getSession(fromId);
+  if (!parent) return null;
+
+  const id = randomUUID();
+  const now = Date.now();
+  const title = `branch of ${parent.title}`.slice(0, 60);
+  db.prepare(
+    "INSERT INTO sessions (id, parent_id, title, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(id, fromId, title, parent.model, now, now);
+
+  const msgs = getSessionMessages(fromId);
+  const slice = upto != null ? msgs.slice(0, upto) : msgs;
+  const insert = db.prepare("INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)");
+  let t = now;
+  for (const m of slice) insert.run(randomUUID(), id, m.role, m.content, t++);
+
+  return { id, parent_id: fromId, title, model: parent.model, created_at: now, updated_at: now };
+}

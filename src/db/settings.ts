@@ -22,3 +22,7 @@ export function getAllSettings(): Record<string, string> {
   const rows = getDb().prepare("SELECT key, value FROM settings").all() as Array<{ key: string; value: string }>;
   return Object.fromEntries(rows.map((r) => [r.key, r.value]));
 }
+
+export function deleteSetting(key: string): void {
+  getDb().prepare("DELETE FROM settings WHERE key = ?").run(key);
+}
